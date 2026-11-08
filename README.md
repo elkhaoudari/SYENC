@@ -1,351 +1,473 @@
 # SYENC — Symbolic Encoding Protocol
 
-<p align="center">
-  <strong>A deterministic, reversible symbolic encoding protocol.</strong>
-  <br>
-  A weighted token system for representing 7-bit ASCII data.
-</p>
+[![CI](https://github.com/elkhaoudari/SYENC/actions/workflows/ci.yml/badge.svg)](https://github.com/elkhaoudari/SYENC/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![C++17](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](https://en.cppreference.com/w/cpp/17)
 
-<p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.1-blue" alt="Version">
-  <img src="https://img.shields.io/badge/language-C%2B%2B17-blue" alt="C++17">
-  <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License">
-  <a href="https://github.com/elkhaoudari/symenc/actions/workflows/ci.yml">
-    <img src="https://github.com/elkhaoudari/symenc/actions/workflows/ci.yml/badge.svg" alt="CI">
-  </a>
-</p>
+**SYENC (Symbolic Encoding Protocol)** is a deterministic, reversible, symbolic encoding scheme that represents ASCII byte values using a small set of weighted tokens.
+
+This repository contains the C++17 reference implementation of **SYENC Protocol v0.1.1**.
+
+The protocol is designed around a simple mathematical model: each supported input byte is represented as a sequence of symbolic tokens whose values can be used to reconstruct the original byte.
+
+> SYENC is an experimental symbolic encoding protocol. It is not encryption, compression, or a replacement for established binary-to-text encodings.
+
+---
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Protocol Tokens](#protocol-tokens)
+- [Encoding Model](#encoding-model)
+- [Supported Range](#supported-range)
+- [Reversibility](#reversibility)
+- [Storage Characteristics](#storage-characteristics)
+- [Protocol Rules](#protocol-rules)
+- [Error Handling](#error-handling)
+- [Implementation](#implementation)
+- [Requirements](#requirements)
+- [Build](#build)
+- [Testing](#testing)
+- [Command-Line Interface](#command-line-interface)
+- [Project Structure](#project-structure)
+- [Limitations](#limitations)
+- [Protocol Specification](#protocol-specification)
+- [License](#license)
 
 ---
 
 ## Overview
 
-**SYENC (Symbolic Encoding Protocol)** is a deterministic and reversible encoding protocol that transforms 7-bit ASCII data into a structured symbolic representation using a weighted token system.
+SYENC uses three symbolic tokens:
 
-The protocol is built around three symbolic tokens:
+| Token | Value | Purpose |
+|:---:|---:|---|
+| `JIG` | +50 | Weighted value token |
+| `€` | +1 | Unit value token |
+| `SAW` | Delimiter | Terminates an encoded byte group |
 
-| Token | UTF-8 Representation | Weight / Function |
-|---|---|---:|
-| `JIG` | `4A 49 47` | +50 |
-| `€` | `E2 82 AC` | +1 |
-| `SAW` | `53 41 57` | Group delimiter |
+Each input byte is converted into a symbolic group consisting of:
 
-Each input byte is represented by a canonical sequence of these tokens. The decoder reconstructs the original byte using the same mathematical rules.
+1. Zero, one, or two `JIG` tokens.
+2. Zero or more `€` tokens.
+3. One `SAW` delimiter.
 
-SYENC is designed as a language-independent protocol, with this repository providing its C++17 reference implementation.
+The decoder reads each group, calculates its numerical value, and reconstructs the original byte.
 
-**Current specification:** v0.1.1 — Frozen.
-
-**Full protocol specification:** [`docs/SPEC.md`](docs/SPEC.md).
-
-## Key Features
-
-- Deterministic and reversible encoding.
-- Language-independent protocol specification.
-- Weighted symbolic representation.
-- Strict token recognition and grammar validation.
-- Six explicitly defined protocol error categories.
-- Zero-based byte-offset error reporting.
-- Binary file input and output.
-- Command-line interface.
-- Automated unit, integration, and round-trip testing.
-- No third-party runtime dependencies.
-
-## Mathematical Foundation
-
-SYENC uses integer division and modulo arithmetic to decompose each supported byte value into weighted components.
-
-For an input byte \(N\), the encoder calculates:
-
-\[
-j = \left\lfloor \frac{N}{50} \right\rfloor
-\]
-
-\[
-e = N \bmod 50
-\]
-
-Where:
-
-- \(N\): Original byte value.
-- \(j\): Number of `JIG` tokens.
-- \(e\): Number of `€` tokens.
-
-The resulting symbolic group is:
-
-\[
-E(N) = JIG^j \cdot EURO^e \cdot SAW
-\]
-
-The decoder reconstructs the original value:
-
-\[
-\boxed{N = 50j + e}
-\]
-
-### Supported Range
-
-The current version supports:
-
-\[
-N \in \{0,1,\ldots,127\}
-\]
-
-With the following constraints:
-
-\[
-j \in \{0,1,2\}
-\]
-
-\[
-0 \leq e \leq 49
-\]
-
-Additionally:
-
-\[
-j=2 \implies e\leq27
-\]
-
-These constraints guarantee that every encoded group represents exactly one valid ASCII byte.
-
-### Reversibility
-
-The fundamental correctness property is:
-
-\[
-\boxed{D(E(N))=N}
-\]
-
-For every supported input byte:
-
-\[
-N\in[0,127]
-\]
-
-The protocol is deterministic: identical input bytes always produce identical encoded output.
-
-## Encoding Example
+### Example
 
 Consider the ASCII character `l`.
 
 Its decimal ASCII value is:
 
-\[
-N=108
-\]
+```text
+108
+```
 
-Calculate the weighted components:
+The encoding parameters are:
 
-\[
-j=\left\lfloor\frac{108}{50}\right\rfloor=2
-\]
+$$
+j = \left\lfloor \frac{108}{50} \right\rfloor = 2
+$$
 
-\[
-e=108\bmod50=8
-\]
+$$
+e = 108 \bmod 50 = 8
+$$
 
-The resulting SYENC representation is:
+Therefore, its symbolic representation is:
 
 ```text
 JIGJIG€€€€€€€€SAW
 ```
 
-Decoding:
+The decoder reconstructs the original value:
 
-\[
-N=(2\times50)+(8\times1)=108
-\]
+$$
+N = 50j + e
+$$
+
+$$
+N = 50(2) + 8 = 108
+$$
+
+---
+
+## Protocol Tokens
+
+SYENC v0.1.1 defines the following exact token representations:
+
+| Token | UTF-8 / ASCII bytes | Meaning |
+|---|---|---|
+| `JIG` | `4A 49 47` | Adds 50 |
+| `€` | `E2 82 AC` | Adds 1 |
+| `SAW` | `53 41 57` | Terminates a group |
+
+The decoder operates on raw input bytes and matches the exact token byte sequences.
+
+It does not perform Unicode normalization or general Unicode character interpretation.
+
+This ensures deterministic token recognition.
+
+---
+
+## Encoding Model
+
+For every supported input byte $N$, the encoder calculates two values.
+
+### Weighted component
+
+$$
+j = \left\lfloor \frac{N}{50} \right\rfloor
+$$
+
+### Unit component
+
+$$
+e = N \bmod 50
+$$
+
+Where:
+
+- $N$ is the original byte value.
+- $j$ is the number of `JIG` tokens.
+- $e$ is the number of `€` tokens.
+
+The resulting symbolic group is:
+
+$$
+E(N) = JIG^j \cdot EURO^e \cdot SAW
+$$
+
+Here, `EURO` represents the `€` token, and the exponents represent token repetition counts.
+
+The decoder reconstructs the original value using:
+
+$$
+D(G) = 50j + e
+$$
+
+---
+
+## Supported Range
+
+SYENC v0.1.1 supports ASCII byte values:
+
+$$
+N \in \{0,1,\ldots,127\}
+$$
+
+The encoding parameters must satisfy the following constraints:
+
+$$
+j \in \{0,1,2\}
+$$
+
+$$
+0 \leq e \leq 49
+$$
+
+Additionally:
+
+$$
+j = 2 \implies e \leq 27
+$$
+
+These constraints ensure that every valid encoded group represents exactly one supported ASCII byte.
+
+---
+
+## Reversibility
+
+The fundamental correctness property of SYENC is reversibility.
+
+For every supported input byte:
+
+$$
+D(E(N)) = N
+$$
+
+For a sequence of supported bytes, decoding the encoded sequence must reproduce the original input byte-for-byte.
+
+The encoder and decoder are deterministic:
+
+- The same input always produces the same encoded output.
+- Every valid encoded group represents one unique supported byte.
+- No secret key or external state is required.
+
+---
+
+## Storage Characteristics
+
+SYENC is a symbolic representation, not a compression algorithm.
+
+Each token occupies exactly 3 bytes:
+
+- `JIG`: 3 bytes.
+- `€`: 3 bytes.
+- `SAW`: 3 bytes.
+
+The encoded size depends on the original byte value.
+
+### Minimum group size
+
+For $N = 0$:
+
+$$
+j = 0,\qquad e = 0
+$$
+
+The encoded group contains only `SAW`.
 
 Therefore:
 
-```text
-108 → l
-```
+$$
+S_{\min} = 3 \text{ bytes}
+$$
 
-## Encoding Efficiency
+### Maximum group size
 
-SYENC uses a weighted representation rather than a naive one-unit-per-value representation.
+The maximum occurs at $N = 99$:
 
-For example, representing the value 108 using naive unary encoding requires 108 repeated marks.
+$$
+j = 1,\qquad e = 49
+$$
 
-SYENC represents the same value using:
+The group contains:
 
-- 2 `JIG` tokens.
-- 8 `€` tokens.
-- 1 `SAW` delimiter.
+- 1 `JIG` token.
+- 49 `€` tokens.
+- 1 `SAW` token.
 
-This results in 11 symbolic tokens instead of 108 repeated units.
+Therefore:
 
-This comparison concerns symbolic unit count, not encoded byte size.
+$$
+S_{\max} = (1 + 49 + 1)\times 3
+$$
 
-### Storage Characteristics
+$$
+S_{\max} = 153 \text{ bytes}
+$$
 
-Each token occupies exactly three bytes in the encoded representation.
-
-The minimum encoded group size is:
-
-\[
-3\text{ bytes}
-\]
-
-The maximum encoded group size is:
-
-\[
-(2+49+1)\times3=156\text{ bytes}
-\]
-
-**Correction:** The maximum for the supported range is actually 153 bytes, because when \(j=2\), \(e\leq27\). Thus:
-
-\[
-(2+27+1)\times3=\boxed{90\text{ bytes}}
-\]
-
-The actual maximum occurs at \(N=99\):
-
-\[
-(1+49+1)\times3=\boxed{153\text{ bytes}}
-\]
+### Average encoded size
 
 Across all 128 supported ASCII values, the average encoded size is:
 
-\[
-\boxed{71.765625\text{ bytes per input byte}}
-\]
+$$
+S_{\text{avg}} =
+\frac{1}{128}
+\sum_{N=0}^{127}
+3\left(
+\left\lfloor \frac{N}{50} \right\rfloor
++
+(N \bmod 50)
++
+1
+\right)
+$$
 
-SYENC is therefore not a compression algorithm and is not designed to outperform Base64, Base85, or hexadecimal in storage efficiency.
+$$
+S_{\text{avg}} = 71.765625
+\text{ bytes per input byte}
+$$
 
-Its purpose is to provide a distinct symbolic representation with explicit grammar and deterministic decoding.
+This means SYENC produces a significantly larger representation than the original input.
 
-## Protocol Behavior
+Its purpose is symbolic representation and protocol experimentation, not storage efficiency.
 
-### Token Grammar
+---
 
-A valid group consists of:
+## Protocol Rules
 
-1. Zero to two `JIG` tokens.
-2. Zero to forty-nine `€` tokens.
-3. Exactly one `SAW` delimiter.
+The decoder enforces strict structural and numerical rules.
 
-The special range constraint for two `JIG` tokens must also be respected.
+### Group structure
+
+Every encoded byte group must follow this order:
+
+```text
+JIG* EURO* SAW
+```
+
+Where:
+
+- `JIG*` represents zero to two `JIG` tokens.
+- `EURO*` represents zero to forty-nine `€` tokens.
+- `SAW` terminates the group.
+
+The additional range restriction for two `JIG` tokens must also be respected.
+
+### Token ordering
+
+Tokens must appear in the correct order.
+
+For example:
+
+```text
+JIG€SAW
+```
+
+is structurally valid.
+
+However:
+
+```text
+€JIGSAW
+```
+
+is invalid because `JIG` cannot appear after a unit token.
 
 ### Whitespace
 
 The decoder accepts the following whitespace characters between tokens:
 
-- Space (`SP`)
-- Horizontal tab (`TAB`)
-- Line feed (`LF`)
-- Carriage return (`CR`)
+- Space
+- Tab
+- Line Feed (`LF`)
+- Carriage Return (`CR`)
 
-The encoder does not generate whitespace.
+Whitespace is not part of the encoded token representation.
 
-### Error Handling
+The encoder emits no whitespace.
 
-The protocol defines six error categories:
+### Empty input
+
+An empty input is valid and decodes to an empty output.
+
+### Exact token matching
+
+The decoder recognizes only the exact byte sequences defined by the protocol.
+
+Unknown or malformed token sequences are rejected.
+
+---
+
+## Error Handling
+
+SYENC v0.1.1 defines explicit protocol error codes.
 
 | Error Code | Description |
 |---|---|
-| `E_NONASCII_INPUT` | Encoder received a byte greater than 127. |
-| `E_BAD_TOKEN` | Unknown or malformed token. |
-| `E_ORDER` | Token sequence violates the required order. |
-| `E_NONCANONICAL` | Token count violates canonical representation rules. |
-| `E_RANGE` | Decoded value exceeds the supported ASCII range. |
-| `E_TRUNCATED` | Input ends inside a token or incomplete group. |
+| `E_NONASCII_INPUT` | Encoder received an unsupported input byte. |
+| `E_BAD_TOKEN` | Unknown or malformed token encountered. |
+| `E_ORDER` | Tokens appear in an invalid order. |
+| `E_NONCANONICAL` | Token group does not follow the canonical representation rules. |
+| `E_RANGE` | Token counts or reconstructed value exceed permitted limits. |
+| `E_TRUNCATED` | Input ends before a complete encoded group is received. |
 
-Errors include zero-based byte offsets identifying the relevant position in the input.
+### Error offsets
 
-The decoder validates the symbolic representation before producing the final decoded result.
+Error offsets are zero-based byte offsets.
 
-For additional implementation details, see [`docs/SPEC.md`](docs/SPEC.md).
+The decoder reports:
 
-## C++17 Implementation
+- The starting byte offset of a malformed token.
+- The input length for `E_TRUNCATED`.
 
-This repository provides a reference implementation written in C++17.
+The decoder validates token structure and numerical constraints while processing the input.
 
-### Architecture
+When multiple violations occur within a token, the implementation applies its defined error precedence:
 
-```text
-symenc/
-│
-├── include/
-│   └── symenc/
-│       ├── cli.hpp
-│       ├── codec.hpp
-│       ├── error.hpp
-│       ├── io.hpp
-│       ├── protocol.hpp
-│       ├── tokenizer.hpp
-│       └── version.hpp
-│
-├── src/
-│   ├── cli/
-│   ├── decoder.cpp
-│   ├── encoder.cpp
-│   ├── error.cpp
-│   ├── io.cpp
-│   ├── tokenizer.cpp
-│   └── version.cpp
-│
-├── tests/
-│
-├── docs/
-│   └── SPEC.md
-│
-├── cmake/
-├── CMakeLists.txt
-├── README.md
-└── LICENSE
+1. `E_ORDER`
+2. `E_NONCANONICAL`
+3. `E_RANGE`
+
+Protocol errors must not result in partially returned decoded output.
+
+For file output, the implementation uses temporary-file handling followed by a rename operation to avoid replacing the destination with incomplete output.
+
+---
+
+## Implementation
+
+The reference implementation is written in C++17.
+
+The project is organized into separate components for:
+
+- Tokenization.
+- Encoding.
+- Decoding.
+- Error handling.
+- Command-line processing.
+- Automated testing.
+
+### Tokenizer
+
+The tokenizer recognizes the protocol's exact token byte sequences.
+
+Its interface includes:
+
+```cpp
+tokenizer.next_token(text, pos)
 ```
 
-### Core Components
+The tokenizer identifies the next valid token and advances through the input.
 
-| Component | Responsibility |
-|---|---|
-| Encoder | Converts supported bytes into SYENC tokens. |
-| Decoder | Reconstructs original bytes from valid SYENC data. |
-| Tokenizer | Recognizes protocol tokens at the byte level. |
-| Error Handling | Reports structured protocol errors and offsets. |
-| File I/O | Handles binary input and output. |
-| CLI | Exposes encoding and decoding operations. |
+It does not interpret arbitrary Unicode characters or normalize token representations.
 
-## Installation and Build
+### Encoder
 
-### Requirements
+The encoder:
+
+1. Receives input bytes.
+2. Validates the supported input range.
+3. Calculates $j$ and $e$.
+4. Emits the corresponding symbolic tokens.
+5. Terminates each group with `SAW`.
+
+### Decoder
+
+The decoder:
+
+1. Reads the encoded byte stream.
+2. Identifies tokens.
+3. Validates token ordering.
+4. Checks token counts and numerical constraints.
+5. Reconstructs the original byte values.
+
+The decoder rejects malformed protocol input instead of silently accepting invalid representations.
+
+---
+
+## Requirements
 
 - C++17-compatible compiler.
-- CMake 3.16 or later.
+- CMake.
 - Standard C++ library.
 
 No third-party runtime dependencies are required.
 
-### Clone the Repository
+---
+
+## Build
+
+Clone the repository:
 
 ```bash
-git clone https://github.com/elkhaoudari/symenc.git
-cd symenc
+git clone https://github.com/elkhaoudari/SYENC.git
+cd SYENC
 ```
 
-### Configure
+Configure the project:
 
 ```bash
 cmake -S . -B build
 ```
 
-### Build
+Build:
 
 ```bash
 cmake --build build
 ```
 
-### Run Tests
+Run the test suite:
 
 ```bash
 ctest --test-dir build --output-on-failure
 ```
 
-### Sanitizer Build
+### Sanitizer build
 
-To enable AddressSanitizer and UndefinedBehaviorSanitizer:
+To build with the project's sanitizer option:
 
 ```bash
 cmake -S . -B build-san -DSYMENC_SANITIZE=ON
@@ -353,146 +475,192 @@ cmake --build build-san
 ctest --test-dir build-san --output-on-failure
 ```
 
-### CMake Options
+### Build options
 
 | Option | Default | Description |
 |---|---|---|
-| `SYMENC_WERROR` | ON | Treat compiler warnings as errors. |
-| `SYMENC_SANITIZE` | OFF | Enable supported sanitizers. |
-| `SYMENC_BUILD_TESTS` | ON | Build automated tests. |
+| `SYMENC_WERROR` | `ON` | Treat compiler warnings as errors. |
+| `SYMENC_SANITIZE` | `OFF` | Enable supported sanitizers. |
+| `SYMENC_BUILD_TESTS` | `ON` | Build the test suite. |
 
-The default build type is `RelWithDebInfo`.
+The default build configuration is `RelWithDebInfo`.
 
-## Command-Line Usage
+---
 
-After building, the executable is located at:
+## Testing
 
-```text
-build/src/symenc
-```
+The project includes automated tests covering the protocol implementation.
 
-### Display Version
+The test suite contains 126 assertions organized into 12 CTest tests.
+
+Coverage includes:
+
+- All 128 supported ASCII byte values.
+- Encoder correctness.
+- Decoder correctness.
+- Round-trip validation.
+- Seeded randomized round-trip tests.
+- Differential testing against a second decoder.
+- Invalid token handling.
+- Token ordering violations.
+- Noncanonical representations.
+- Range violations.
+- Truncated input.
+- Binary input and output handling.
+- CLI behavior and exit codes.
+- File output handling.
+
+Example manual round-trip test:
 
 ```bash
-./build/src/symenc --version
+printf 'CTF{SYENC_IS_WORKING}' > message.txt
+
+./build/src/symenc encode message.txt message.syenc
+
+./build/src/symenc decode message.syenc recovered.txt
+
+cmp -s message.txt recovered.txt \
+    && echo "SUCCESS: SYENC WORKS!"
 ```
 
-### Display Help
+---
+
+## Command-Line Interface
+
+The compiled executable provides two main operations.
+
+### Encode
+
+```bash
+./build/src/symenc encode INPUT OUTPUT
+```
+
+Example:
+
+```bash
+./build/src/symenc encode message.txt message.syenc
+```
+
+### Decode
+
+```bash
+./build/src/symenc decode INPUT OUTPUT
+```
+
+Example:
+
+```bash
+./build/src/symenc decode message.syenc recovered.txt
+```
+
+### Standard input and output
+
+The special argument `-` represents standard input or standard output.
+
+Examples:
+
+```bash
+cat message.txt | ./build/src/symenc encode - -
+```
+
+```bash
+cat message.syenc | ./build/src/symenc decode - -
+```
+
+### Help and version
 
 ```bash
 ./build/src/symenc --help
 ```
 
-### Encode a File
-
 ```bash
-./build/src/symenc encode input.txt output.syenc
+./build/src/symenc --version
 ```
 
-### Decode a File
+### Exit codes
 
-```bash
-./build/src/symenc decode output.syenc recovered.txt
-```
+| Exit Code | Meaning |
+|---:|---|
+| `0` | Successful execution |
+| `1` | Protocol error |
+| `2` | Invalid command-line usage |
+| `3` | Input/output error |
 
-### Verify the Result
+The CLI refuses identical input and output file paths.
 
-```bash
-cmp input.txt recovered.txt
-```
-
-No output from `cmp` indicates that both files are identical.
-
-### Standard Input and Output
-
-The CLI supports `-` as a standard input or output path:
-
-```bash
-printf 'HELLO' | ./build/src/symenc encode - -
-```
-
-Identical input and output file paths are refused.
-
-File output uses a temporary file followed by a rename operation to avoid exposing incomplete protocol output on validation failure.
-
-## Testing and Validation
-
-The project includes automated tests covering:
-
-- Protocol specification vectors.
-- All 128 supported ASCII values.
-- Encoder and decoder correctness.
-- Tokenizer behavior.
-- Error codes and byte offsets.
-- Malformed and truncated inputs.
-- Randomized round-trip testing.
-- Differential decoder testing.
-- Binary file handling.
-- Command-line behavior.
-- End-to-end encoding and decoding.
-
-The test suite contains 126 assertions across 12 CTest test executables, plus process-level end-to-end coverage.
-
-The implementation has been tested with GCC and Clang on Linux, including AddressSanitizer and UndefinedBehaviorSanitizer.
-
-Cross-platform CI jobs for macOS and Windows are informational until their compatibility has been fully verified.
-
-## Limitations and Security Considerations
-
-SYENC is an encoding protocol, not a security mechanism.
-
-- It provides no encryption or confidentiality.
-- It uses no secret key.
-- It provides no cryptographic integrity verification.
-- It does not compress data.
-- The current specification supports only 7-bit ASCII bytes.
-- Encoded output is substantially larger than the original input.
-
-Do not use SYENC as a replacement for cryptographic encryption, authentication, or secure data transport.
-
-## Potential Applications
-
-SYENC may be useful for experimentation and educational scenarios such as:
-
-- Custom CTF encoding challenges.
-- Cybersecurity and computer science education.
-- Symbolic data representation.
-- Parser and decoder testing.
-- Protocol implementation exercises.
-- Exploring reversible encoding systems.
-
-These are potential use cases, not claims of production deployment.
-
-## Specification and Versioning
-
-The protocol specification is maintained separately from its implementation:
-
-[`docs/SPEC.md`](docs/SPEC.md)
-
-Current release:
-
-**SYENC v0.1.1 — Frozen Specification**
-
-Implementations should follow the specification rather than relying on language-specific behavior.
-
-Future implementations in other programming languages should produce identical encoded byte sequences and decode the same valid inputs.
-
-## Contributing
-
-Contributions, technical reviews, bug reports, and suggestions are welcome.
-
-Before proposing protocol changes, please review the frozen specification.
-
-Implementation improvements and additional compatible implementations can be developed without changing the protocol itself.
-
-## License
-
-SYENC is distributed under the MIT License.
-
-See [`LICENSE`](LICENSE) for details.
+File output is written using temporary-file handling before the final rename operation.
 
 ---
 
-<p align="center">
-  <strong>SYENC — One protocol. Three tokens. Reversible symbolic representation.</strong>
-</p>
+## Project Structure
+
+```text
+symenc/
+├── .github/
+│   └── workflows/
+│       └── ci.yml
+├── docs/
+│   └── SPEC.md
+├── include/
+│   └── symenc/
+├── src/
+├── tests/
+├── .gitattributes
+├── .gitignore
+├── CMakeLists.txt
+├── LICENSE
+└── README.md
+```
+
+The `include/` directory contains public headers.
+
+The `src/` directory contains the implementation.
+
+The `tests/` directory contains automated tests and supporting test data.
+
+The `docs/` directory contains the formal protocol specification.
+
+---
+
+## Limitations
+
+SYENC v0.1.1 has a deliberately limited scope.
+
+- Supports ASCII byte values from 0 to 127 only.
+- Does not support arbitrary binary data as input.
+- Does not provide encryption.
+- Does not provide compression.
+- Does not provide authentication or integrity verification.
+- Does not use secret keys.
+- Does not include checksums or error correction.
+- Produces a larger output than the original input.
+
+SYENC should not be used to protect confidential information or to verify data authenticity.
+
+It is an experimental symbolic encoding protocol intended for learning, implementation experimentation, and protocol design exploration.
+
+---
+
+## Protocol Specification
+
+The formal specification for SYENC v0.1.1 is available here:
+
+[`docs/SPEC.md`](docs/SPEC.md)
+
+The specification defines the protocol's token representation, encoding model, decoding rules, validation constraints, and error behavior.
+
+The specification is the authoritative reference for protocol behavior.
+
+---
+
+## License
+
+SYENC is released under the **MIT License**.
+
+See the [`LICENSE`](LICENSE) file for the complete license text.
+
+---
+
+**SYENC — Symbolic Encoding Protocol v0.1.1**
+
+A symbolic approach to representing and reconstructing ASCII byte values.
