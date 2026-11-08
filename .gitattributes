@@ -1,0 +1,4 @@
+* text=auto
+tests/data/* text eol=lf
+*.cmake text eol=lf
+CMakeLists.txt text eol=lf
